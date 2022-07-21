@@ -1,4 +1,4 @@
-const populationSize = 200;
+const populationSize = 100;
 
 const inputCount = 2;
 const outputCount = 5;
@@ -9,8 +9,8 @@ const fullyConnect = false;
 
 const mutateConnection = 0.8;
 const mutateBias = 0.5;
-const mutateNode = 0.1;
-const addConnection = 0.05;
-const addNode = 0.03;
+const mutateNode = 0.03;
+const addConnection = 1;
+const addNode = 1;
 
 const activationFunction = 'random'

@@ -118,6 +118,7 @@ class Player{
 	calculateFitness(){ //Fitness function : adapt it to the needs of the
 		let distToGoal = p5.Vector.dist(this.pos, goal.pos)
 		this.score = 1 / distToGoal * 1000;
+		this.score = map(this.score, 0, 1, 1, 10);
 
 		if (distToGoal < goal.r) {
 			this.score = 9999;

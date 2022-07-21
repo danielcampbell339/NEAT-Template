@@ -32,4 +32,5 @@ function draw() {
 
 	document.getElementById('generation').innerHTML = generation;
 	document.getElementById('population').innerHTML = populationSize;
+	document.getElementById('frame_rate').innerHTML = floor(frameRate());
 }

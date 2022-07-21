@@ -18,12 +18,13 @@ var activationsNames = [
 //The Node Class
 //This is where math appends
 class Node {
-	constructor(num, lay, isOutput) {
+	constructor(num, lay, isOutput, isBias) {
 		this.number = num;
 		this.layer = lay;
 		this.activationFunction = this.getActivationFunction(); //Number between 0 and 4
 		this.bias = random(1) * 2 - 1;
 		this.output = isOutput || false; //is this node an Output node?
+		this.isBias = isBias || false;
 
 		this.inputSum = 0;
 		this.outputValue = 0;
@@ -86,7 +87,7 @@ class Node {
 	}
 
 	clone() { //Returns a copy of this node
-		let node = new Node(this.number, this.layer, this.output);
+		let node = new Node(this.number, this.layer, this.output, this.isBias);
 		node.bias = this.bias; //Same bias
 		node.activationFunction = this.activationFunction; //Same activationFunction
 		return node;

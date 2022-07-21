@@ -8,35 +8,53 @@ class Genome {
 		this.id = id; //Genome id -> used for the drawing
 		this.layers = 2;
 		this.nextNode = 0;
+		this.offSpring = offSpring;
 
 		this.nodes = [];
 		this.connections = [];
 
-		if(!offSpring) { //This is not an offspring genome generate a fullyConnected net
-			for (let i = 0; i < this.inputs; i++) {
-				this.nodes.push(new Node(this.nextNode, 0));
-				this.nextNode++;
-			}
-
-			for (let i = 0; i < this.outputs; i++) {
-				let node = new Node(this.nextNode, 1, true);
-				this.nodes.push(node);
-				this.nextNode++;
-			}
-
-			if (fullyConnect) {
-				this.fullyConnect();
-			}
+		if (offSpring) {
+			return;
 		}
+
+		for (let i = 0; i < this.inputs; i++) {
+			this.nodes.push(new Node(this.nextNode, 0));
+			this.nextNode++;
+		}
+
+		for (let i = 0; i < this.outputs; i++) {
+			let node = new Node(this.nextNode, 1, true);
+			this.nodes.push(node);
+			this.nextNode++;
+		}
+		
+		let biasNode = new Node(this.nextNode, 0, false, true);
+		this.nodes.push(biasNode);
+		this.biasNode = this.nextNode;
+		this.nextNode++;
+
+		if (fullyConnect) {
+			this.fullyConnect();
+		}
+	}
+
+	addFixedConnection(node1, node2, weight = null) {
+		if (!weight) {
+			weight = random(1) * this.inputs * Math.sqrt(2 / this.inputs);
+		}
+
+		this.connections.push(new Connection(node1, node2, weight));
 	}
 
 	fullyConnect() {
 		for (let i = 0; i < this.inputs; i++) {
 			for (let j = this.inputs; j < this.outputs + this.inputs; j++) {
-				let weight = random(1) * this.inputs * Math.sqrt(2 / this.inputs);
-				this.connections.push(new Connection(this.nodes[i], this.nodes[j], weight));
+				this.addFixedConnection(this.nodes[i], this.nodes[j]);
 			}
 		}
+
+		this.addFixedConnection(this.nodes[this.biasNode], this.nodes[this.nodes.length - 2]);
+		this.addFixedConnection(this.nodes[this.biasNode], this.nodes[this.nodes.length - 3]);
 	}
 
 	//Network Core
@@ -62,8 +80,10 @@ class Genome {
 		this.nodes.forEach((node) => { node.inputSum = 0; });
 
 		//asin new inputs
-		for (let i = 0; i < this.inputs; i++)
+		for (let i = 0; i < this.inputs; i++) {
 			this.nodes[i].outputValue = inputValues[i];
+		}
+		this.nodes[this.biasNode].outputValue = 1;
 
 		//Engage all nodes and Extract the results from the outputs
 		let result = [];
@@ -81,7 +101,7 @@ class Genome {
 	crossover(partner) {
 		let offSpring = new Genome(0, true); //Child genome
 		offSpring.nextNode = this.nextNode;
-
+		offSpring.biasNode = this.biasNode;
 
 		//Take all nodes from this parent - output node activation 50%-50%
 		for(let i = 0; i < this.nodes.length; i++){
@@ -175,24 +195,26 @@ class Genome {
 
 		//Get a random connection to replace with a node
 		let connectionIndex = floor(random(1) * this.connections.length);
+
+		while (
+			this.connections[connectionIndex].fromNode == this.nodes[this.biasNode] && 
+			this.connections.length !== 1
+		) {
+			connectionIndex = floor(random(this.connections.length));
+		}
+	  
 		let pickedConnection = this.connections[connectionIndex];
 		pickedConnection.enabled = false;
 		this.connections.splice(connectionIndex, 1); //Delete the connection
 
 		//Create the new node
 		let newNode = new Node(this.nextNode, pickedConnection.fromNode.layer + 1);
-		this.nodes.forEach((node) => { //Shift all nodes layer value
-			if (node.layer > pickedConnection.fromNode.layer)
-				node.layer++;
-		});
 
 		//New connections
-		let newConnection1 = new Connection(pickedConnection.fromNode, newNode, 1);
-		let newConnection2 = new Connection(newNode, pickedConnection.toNode, pickedConnection.weight);
+		this.addFixedConnection(pickedConnection.fromNode, newNode, 1);
+		this.addFixedConnection(newNode, pickedConnection.toNode, pickedConnection.weight);
+		this.addFixedConnection(this.nodes[this.biasNode], newNode, 0);
 
-		this.layers++;
-		this.connections.push(newConnection1); //Add connection
-		this.connections.push(newConnection2); //Add connection
 		this.nodes.push(newNode); //Add node
 		this.nextNode++;
 	}
@@ -223,8 +245,6 @@ class Genome {
 		let newConnection = new Connection(this.nodes[node1], this.nodes[node2], random(1) * this.inputs * Math.sqrt(2 / this.inputs));
 		this.connections.push(newConnection);
 	}
-
-
 
 	//Utilities
 	commonConnection(innN, connections) {
@@ -300,86 +320,127 @@ class Genome {
 		return this.connections.length + this.nodes.length;
 	}
 
-	draw(width = 500, height = 400, container = "svgContainer") { //Draw the genome to a svg
-		var element = document.getElementById(this.id);
-		
-		if (element) {
-			width = element.parentNode.offsetWidth;
-			height = element.parentNode.offsetHeight;
+	draw() {		  
+		let data = this.buildGraph();
 
-			element.parentNode.removeChild(element);
+		console.log(data);
+
+		this.createGraph(data);
+	}
+
+	createGraph(graph) {
+		let parent = document.getElementById('neuralNet')
+		parent.innerHTML = '';
+
+	var width = parent.offsetWidth,
+    height = 500,
+    nodeSize = 30;
+
+var color = d3.scale.category20();
+
+var svg = d3.select("#neuralNet").append("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+    var nodes = graph.nodes;
+
+    // get network size
+    var netsize = {};
+    nodes.forEach(function (d) {
+      if(d.layer in netsize) {
+          netsize[d.layer] += 1;
+      } else {
+          netsize[d.layer] = 1;
+      }
+      d["lidx"] = netsize[d.layer];
+    });
+
+    // calc distances between nodes
+    var largestLayerSize = Math.max.apply(
+        null, Object.keys(netsize).map(function (i) { return netsize[i]; }));
+
+    var xdist = width / Object.keys(netsize).length,
+        ydist = height / largestLayerSize;
+
+    // create node locations
+    nodes.map(function(d) {
+      d["x"] = (d.layer + 1 - 0.5) * xdist;
+      d["y"] = (d.lidx - 0.5) * ydist;
+    });
+
+    // draw links
+    svg.selectAll(".link")
+        .data(graph.connections)
+      	.enter().append("line")
+        .attr("x1", function(d) { return nodes[d.source].x; })
+        .attr("y1", function(d) { return nodes[d.source].y; })
+        .attr("x2", function(d) { return nodes[d.target].x; })
+        .attr("y2", function(d) { return nodes[d.target].y; })
+		.style("stroke", function (d) { return d.weight > 0 ? "#0f0" : "#f00"; })
+		.style("stroke-width", function (d) { return d.enabled ? (d.weight > 0 ? 0.3 + d.weight : 0.3 + d.weight*-1) : 0 })
+		.style("stroke-width", function(d) { return Math.sqrt(d.value); });
+
+    // draw nodes
+    var node = svg.selectAll(".node")
+        .data(nodes)
+      .enter().append("g")
+        .attr("transform", function(d) {
+            return "translate(" + d.x + "," + d.y + ")"; }
+        );
+
+    node.append("circle")
+        .attr("class", "node")
+        .attr("r", nodeSize)
+        .style("fill", function(d) { return color(d.layer); });
+
+    node.append("text")
+        .attr("dx", "-.35em")
+        .attr("dy", ".35em")
+		.text(function(d) { 
+			return (!d.isBias ? d.number : 'b') + (d.layer > 0 ? "(" + d.activationFunction + ")" : "") });
+	}
+
+	buildGraph() {
+		let data = {
+			nodes: [],
+			connections: []
+		};
+
+		let maxLayer = -1;
+		for (let i = 0; i < this.nodes.length; i++) {
+			if (this.nodes[i].output) {
+				continue;
+			}
+
+			let node = this.nodes[i].clone();
+
+			node.label = node.number;
+			node.layer;
+
+			if (node.layer > maxLayer) {
+				maxLayer = node.layer;
+			}
+
+			data.nodes.push(node);
 		}
 
-		var svg = d3.select("body").append("svg")
-			.attr("width", width)
-			.attr("height", height)
-			.attr("id", this.id);
+		for (let i = 0; i < this.nodes.length; i++) {
+			if (!this.nodes[i].output) {
+				continue;
+			}
 
-		var force = d3.layout.force()
-			.gravity(.05)
-			.distance(100)
-			.charge(-100)
-			.size([width, height]);
+			let node = this.nodes[i].clone();
 
-		let connections = [];
+			node.label = node.number;
+			node.layer = maxLayer + 1;
+
+			data.nodes.push(node);
+		}
+
 		this.connections.forEach(conn => {
-			connections.push({ source: this.getNode(conn.fromNode.number), target: this.getNode(conn.toNode.number), weight: conn.weight, enabled: conn.enabled });
+			data.connections.push({ source: this.getNode(conn.fromNode.number), target: this.getNode(conn.toNode.number), weight: conn.weight, enabled: conn.enabled });
 		});
 
-		let nodes = [];
-		this.nodes.forEach(originalNode => {
-			let node = originalNode.clone();
-			if(node.layer == 0) {
-				node.fixed = true;
-				node.y =  height - (height * 0.2);
-				node.x = ((width/this.inputs) * node.number) + (width/this.inputs)/2;
-			}
-
-			if(node.output) {
-				node.fixed = true;
-				node.y =  (height * 0.2);
-				node.x = ((width/this.outputs) * (node.number - this.inputs)) + (width/this.outputs)/2;
-			}
-
-			nodes.push(node);
-		});
-
-		force.nodes(nodes)
-			.links(connections)
-			.start();
-
-		var link = svg.selectAll(".link")
-			.data(connections)
-			.enter().append("line")
-			.attr("class", "link")
-			.style("stroke-width", function (d) { return d.enabled ? (d.weight > 0 ? 0.3 + d.weight : 0.3 + d.weight*-1) : 0 })
-			.style("stroke", function (d) { return d.weight > 0 ? "#0f0" : "#f00"; });
-
-		var node = svg.selectAll(".node")
-			.data(nodes)
-			.enter().append("g")
-			.attr("class", "node")
-			.call(force.drag);
-
-		node.append("circle")
-			.attr("r", "5")
-			.attr("fill", function (d) { return d.layer == 0 ? "#00f" : d.output ? "#f00" : "#000" });
-
-		node.append("text")
-			.attr("dx", 12)
-			.attr("dy", ".35em")
-			.text(function(d) { return d.number + (d.layer > 0 ? "(" + d.activationFunction + ")" : null) });
-
-		force.on("tick", function () {
-			link.attr("x1", function (d) { return d.source.x; })
-				.attr("y1", function (d) { return d.source.y; })
-				.attr("x2", function (d) { return d.target.x; })
-				.attr("y2", function (d) { return d.target.y; });
-
-			node.attr("transform", function (d) { return "translate(" + d.x + "," + d.y + ")"; });
-		});
-
-		var element = document.getElementById(this.id);
-		document.getElementById(container).append(element);
+		return data;
 	}
 }

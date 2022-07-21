@@ -1,6 +1,6 @@
 class Goal {
 	constructor(){
-		this.pos = createVector(width / 2, height - 10);
+		this.pos = createVector(random(width), height - 10);
 		this.vel = createVector(0, 0);
 		this.r = 15;
 	}
